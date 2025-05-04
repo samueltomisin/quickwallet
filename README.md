@@ -1,2 +1,2 @@
 # swiftpay
-A Fintech Startup Build
+simple, fintech relevant build repo
