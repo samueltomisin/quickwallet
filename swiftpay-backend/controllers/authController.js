@@ -2,9 +2,12 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
+const Wallet = require("../models/Wallet"); 
+
 exports.register = async (req, res) => {
   const { fullName, email, password } = req.body;
-
+  
+  await new Wallet({ user: newUser._id }).save();
   try {
     const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ message: 'User already exists' });
@@ -13,7 +16,8 @@ exports.register = async (req, res) => {
     const user = await User.create({ fullName, email, password: hashed });
 
     res.status(201).json({ message: 'User registered successfully', userId: user._id });
-  } catch (err) {
+  } 
+  catch (err) {
     res.status(500).json({ error: 'Registration failed' });
   }
 };

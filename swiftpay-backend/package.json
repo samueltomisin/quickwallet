@@ -9,7 +9,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "- Set up the backend for user authentication (register/login).\r - Implement JWT-based authentication and MongoDB integration.",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -20,5 +20,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
+  },
+  "directories": {
+    "doc": "docs"
   }
 }
