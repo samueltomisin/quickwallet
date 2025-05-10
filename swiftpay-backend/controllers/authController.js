@@ -1,28 +1,27 @@
 const User = require('../models/User');
+const Wallet = require("../models/Wallet"); 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const Wallet = require("../models/Wallet"); 
-
-exports.register = async (req, res) => {
+// Register user
+const registerUser = async (req, res) => {
   const { fullName, email, password } = req.body;
-  
-  await new Wallet({ user: newUser._id }).save();
+
   try {
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ message: 'User already exists' });
+    const Userexists = await User.findOne({ email });
+    if (Userexists) return res.status(400).json({ message: 'User already exists' });
 
     const hashed = await bcrypt.hash(password, 10);
     const user = await User.create({ fullName, email, password: hashed });
 
     res.status(201).json({ message: 'User registered successfully', userId: user._id });
-  } 
-  catch (err) {
+  } catch (err) {
     res.status(500).json({ error: 'Registration failed' });
   }
 };
 
-exports.login = async (req, res) => {
+// Login user
+const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
@@ -39,3 +38,5 @@ exports.login = async (req, res) => {
     res.status(500).json({ error: 'Login failed' });
   }
 };
+
+module.exports = { registerUser, loginUser};
