@@ -5,7 +5,7 @@ const router = express.Router();
 
 
 
-router.get("/", authMiddleware, getWallet);
+router.get("/:userId", authMiddleware, getWallet);
 router.post("/fund", authMiddleware, fundWallet);
 router.post("/create", authMiddleware, createWallet);
 router.post("/withdraw", authMiddleware, withdrawFunds);

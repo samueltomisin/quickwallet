@@ -1,8 +1,9 @@
 const Wallet = require("../models/Wallet");
 
-const getWallet = async (req, res) => {
+const getWallet =async (req, res) => {
+  const { userId } = req.params;
   try {
-    const wallet = await Wallet.findOne({ user: req.userId });
+    const wallet = await Wallet.findOne({ userId: req.userId });
     if (!wallet) return res.status(404).json({ message: "Wallet not found" });
     res.status(200).json({ balance: wallet.balance });
   } catch (error) {
