@@ -1,33 +1,49 @@
-const { response } = require('express');
 const User = require('../models/User');
 const Wallet = require("../models/Wallet"); 
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const generateToken = require("../utils/generateToken");
 
 // Register user
 const registerUser = async (req, res) => {
+  const { fullName, email, password } = req.body;
   
   try {
+    if (!fullName || !email || !password) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
 
-const { fullName, email, password } = req.body;
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
 
-   if (!fullName || !email || !password) {
-    return response.status(400).json({ error: 'All Fields are required' });
-  }
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await User.create({ fullName, email, password: hashedPassword });
 
-    const hashed = await bcrypt.hash(password, 10);
-    const newUser = new User({ fullName, email, password: hashed });
-    await newUser.save();
-
-    const newWallet = new Wallet({
-      userId: newUser._id,
-      balance: 0
+    // Create wallet for new user
+    const wallet = new Wallet({
+      user: newUser._id,
+      email: email,
+      balance: 0,
+      currency: "NGN",
     });
-    await newWallet.save();
-    
-    res.status(201).json({ message: 'User registered successfully', userId: newUser._id, newWallet: newWallet._id });
+    await wallet.save();
+    console.log("💼 Wallet created for user:", newUser._id);
+
+    res.status(201).json({ 
+      message: 'User registered successfully', 
+      user: {
+        _id: newUser._id, 
+        fullName: newUser.fullName, 
+        email: newUser.email
+      },
+      token: generateToken(newUser._id) 
+    });
+
   } catch (err) {
-    res.status(500).json({ error: 'Registration failed' });
+    console.error("Registration error:", err);
+    res.status(500).json({ message: "Registration failed" });
   }
 };
 
@@ -35,27 +51,30 @@ const { fullName, email, password } = req.body;
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required'
-    });
-  }
-
   try {
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ message: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '2d' });
- 
-    const wallet = await Wallet.findOne({ userId: user._id });
-    const balance = wallet ? wallet.balance : 0;
-
-    res.json({ token, user: { fullName: user.fullName, walletBalance: user.walletBalance } });
+    res.json({ 
+      message: 'Login successful',
+      user: { 
+        fullName: user.fullName, 
+        email: user.email, 
+        _id: user._id 
+      },
+      token: generateToken(user._id) 
+    });
   } catch (err) {
-    res.status(500).json({ error: 'Login failed' });
+    console.error("Login error:", err);
+    res.status(500).json({ message: 'Login failed' });
   }
 };
 
-module.exports = { registerUser, loginUser};
+module.exports = { registerUser, loginUser };
