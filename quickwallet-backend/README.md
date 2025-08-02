@@ -1,4 +1,4 @@
-# SwiftPay Backend - Sprint 1 Documentation
+# Quick Wallet - Sprint 1 Documentation
 
 ## 🚀 **Objective**:  
 - Set up the backend for user authentication (register/login).
@@ -32,5 +32,3 @@
 - **Authentication**: JWT, bcryptjs
 - **Dev Tools**: Postman for API testing
 
-## 🔗 **Links**:
-- **GitHub Repository**: https://github.com/samueltomisin/swiftpay
