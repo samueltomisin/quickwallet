@@ -1,28 +1,45 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const prisma = require('../prismaClient')
 
-const authMiddleware = (req, res, next) => {
+
+const authMiddleware = async (req, res, next) => {
   let token;
 
   if ( 
     req.headers.authorization && 
     req.headers.authorization.startsWith("Bearer")
   ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
   
+     if (!token) {
+    return res.status(401).json({ 
+      success: false,
+      message: "No token provided" });
+  }
+
   try {
-    token = req.headers.authorization?.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.userId = decoded.userId;
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId }
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: "User belonging to this token no longer exists" });
+    }
+  
+
+    req.user = { id: user.id };
     next();
 
   } catch (error) {
-    res.status(401).json({ message: "Invalid token" });
+    res.status(401).json({ 
+      message: "Invalid token",
+    error: error.message
+   });
   }
 
- if (!token) {return res.status(401).json({ message: "No token provided" });
-} 
-  }
 };
 
 module.exports = authMiddleware;

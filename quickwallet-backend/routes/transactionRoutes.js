@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { getTransactionsByUser } = require('../controllers/transactionController');
+const authMiddleware = require("../middleware/authMiddleware");
+const transactionController = require('../controllers/transactionController');
 
-router.get('/:userId', getTransactionsByUser);
+router.get('/:email', authMiddleware, transactionController.getTransactionsByUser);
 
 module.exports = router;

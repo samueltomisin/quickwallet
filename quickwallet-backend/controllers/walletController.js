@@ -1,99 +1,91 @@
-const Wallet = require("../models/Wallet");
-const User = require('../models/User');
-const recordTransaction = require('../utils/recordTransaction');
-const mongoose = require('mongoose'); 
+const prisma = require('../prismaClient');
 
 const getWallet = async (req, res) => {
-  const { email } = req.body; // Changed from email to userId for consistency
+  const { email } = req.body;
+
   try {
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
 
-    const wallet = await Wallet.findOne({ email }); // Changed to userId
-    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
-    
-    res.status(200).json({ 
-      balance: wallet.balance,
-      currency: wallet.currency 
+    const wallet = await prisma.wallet.findFirst({
+      where: {
+        user: { 
+          email: email, },
+      },
+      select: {
+        balance: true,
+        currency: true
+      }
     });
+
+    if (!wallet) {
+      return res.status(404).json({ message: "Wallet not found" });
+    }
+
+    res.status(200).json(wallet);
+
   } catch (error) {
-    console.error("Server error:", error);
+    console.error("Get wallet error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 const createWallet = async (req, res) => {
-  try {
-    const { userId, email } = req.body;
+  const { email } = req.body;
 
-    if (!userId || !email) { 
-      return res.status(400).json({ message: "UserId and Email are required" });
+  try {
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
 
-    const existingWallet = await Wallet.findOne({ $or: [{ userId }, { email }] });
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Check if wallet already exists
+    const existingWallet = await prisma.wallet.findUnique({
+      where: { userId: user.id }
+    });
+
     if (existingWallet) {
       return res.status(400).json({ message: "Wallet already exists for this user" });
     }
 
-    const wallet = new Wallet({ 
-      user: userId, // Fixed from newUser._id to userId
-      email: email,   // Added email to wallet
-      balance: 0, 
-      currency: "NGN" 
+    // Create wallet
+    const wallet = await prisma.wallet.create({
+      data: {
+        userId: user.id,
+        balance: 0,
+        currency: "NGN"
+      }
     });
-    
-    await wallet.save();
-    res.status(201).json({ 
-      message: "Wallet created successfully", 
-      wallet: wallet 
+
+    res.status(201).json({
+      message: "Wallet created successfully",
+      wallet: {
+        id: wallet.id,
+        balance: wallet.balance,
+        currency: wallet.currency,
+      },
     });
+
   } catch (error) {
-    console.error("Error Message:", error);
+    console.error("Create wallet error:", error);
     res.status(500).json({ message: error.message });
   }
 };
 
 const fundWallet = async (req, res) => {
+  const { email, amount } = req.body;
+
   try {
-    const { email, amount, currency } = req.body;
-
-    if (!email || !amount || !currency) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
-    if (amount <= 0) {
-      return res.status(400).json({ message: "Amount must be greater than zero" });
-    }
-
-    const wallet = await Wallet.findOne({ email });
-    if (!wallet) return res.status(404).json({ message: "Wallet not found" });
-    
-    wallet.balance += amount;
-    await wallet.save();
-    
-    await recordTransaction({
-      email: email,
-      type: 'fundWallet',
-      amount: amount,
-      status: 'success'
-    });
-
-    res.status(200).json({ 
-      message: "Wallet funded", 
-      balance: wallet.balance 
-    });
-  } catch (error) {
-    console.error("Funding error:", error);
-    res.status(500).json({ message: "Funding failed" });
-  }
-};
-
-const withdrawFunds = async (req, res) => {
-  try {
-    const { email, amount } = req.body;
-
-    if (!email || !amount) {
+    if (!email || amount === undefined) {
       return res.status(400).json({ message: "Email and amount are required" });
     }
 
@@ -101,111 +93,231 @@ const withdrawFunds = async (req, res) => {
       return res.status(400).json({ message: "Amount must be greater than zero" });
     }
 
-    const wallet = await Wallet.findOne({ email });
-    if (!wallet) {
-      return res.status(404).json({ message: "Wallet not found" });
+    const result = await prisma.$transaction(async (tx) => {
+      
+      // Get user and wallet
+      const user = await tx.user.findUnique({
+        where: { email },
+        
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Update wallet balance
+      const wallet = await prisma.wallet.update({
+        where: { userId: user.id },
+        data: { balance: { increment: amount } }
+      });
+
+      // Record transaction
+      await tx.transaction.create({
+        data: {
+          userId: user.id,
+          amount,
+          type: 'fund',
+          status: 'success',
+          reference: `fund-${Date.now()}`
+        }
+      });
+
+      return wallet;
+    });
+
+    res.status(200).json({
+      message: "Wallet funded successfully",
+      balance: result.balance
+    });
+
+  } catch (error) {
+    console.error("Fund wallet error:", error);
+    res.status(500).json({ 
+      message: error.message || "Funding failed" 
+    });
+  }
+};
+
+const withdrawFunds = async (req, res) => {
+  const { email, amount } = req.body;
+
+  try {
+    if (!email || amount === undefined) {
+      return res.status(400).json({ message: "Email and amount are required" });
     }
 
-    if (wallet.balance < amount) {
-      return res.status(400).json({ message: "Insufficient funds" });
+    if (amount <= 0) {
+      return res.status(400).json({ message: "Amount must be greater than zero" });
     }
 
-    wallet.balance -= amount;
-    await wallet.save();
+    const result = await prisma.$transaction(async (prisma) => {
+      // Get user and wallet
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true }
+      });
 
-    await recordTransaction({
-      email: email,
-      type: 'withdrawFunds',
-      amount: amount,
-      status: 'success'
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const wallet = await prisma.wallet.findUnique({
+        where: { userId: user.id }
+      });
+
+      if (!wallet) {
+        throw new Error("Wallet not found");
+      }
+
+      if (wallet.balance < amount) {
+        throw new Error("Insufficient funds");
+      }
+
+      // Update wallet balance
+      const updatedWallet = await prisma.wallet.update({
+        where: { userId: user.id },
+        data: { balance: { decrement: amount } }
+      });
+
+      // Record transaction
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+          amount,
+          type: 'withdrawal',
+          status: 'success',
+          reference: `withdraw-${Date.now()}`
+        }
+      });
+
+      return updatedWallet;
     });
 
     res.status(200).json({
       message: "Withdrawal successful",
-      newBalance: wallet.balance
+      newBalance: result.balance
     });
+
   } catch (error) {
     console.error("Withdrawal error:", error);
-    res.status(500).json({ 
-      message: "Withdrawal failed",
-      error: error.message 
+    const status = error.message === "User not found" || error.message === "Wallet not found" 
+      ? 404 
+      : error.message === "Insufficient funds" 
+      ? 400 
+      : 500;
+    
+    res.status(status).json({ 
+      message: error.message || "Withdrawal failed" 
     });
   }
 };
 
 const transferFunds = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  
-  try {
-    const { fromUserId, toUserEmail, amount } = req.body;
+  const { fromEmail, toEmail, amount } = req.body;
 
-    if (!fromUserId || !toUserEmail || !amount) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Missing required fields" });
+  try {
+    if (!fromEmail || !toEmail || amount === undefined) {
+      return res.status(400).json({ message: "From email, to email and amount are required" });
     }
 
     if (amount <= 0) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Transfer amount must be greater than zero" });
+      return res.status(400).json({ message: "Amount must be greater than zero" });
     }
 
-    const senderWallet = await Wallet.findOne({ userId: fromUserId }).session(session);
-    const receiverUser = await User.findOne({ email: toUserEmail }).session(session);
+    if (fromEmail === toEmail) {
+      return res.status(400).json({ message: "Cannot transfer to yourself" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Get sender and receiver
+      const sender = await tx.user.findUnique({
+        where: { email: fromEmail },
+        select: { id: true }
+      });
+
+      const receiver = await tx.user.findUnique({
+        where: { email: toEmail },
     
-    if (!receiverUser) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "Receiver not found" });
-    }
+      });
 
-    if (fromUserId === receiverUser._id.toString()) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Cannot transfer to self" });
-    }
+      if (!sender || !receiver) {
+        throw new Error(sender ? "Receiver not found" : "Sender not found");
+      }
 
-    const receiverWallet = await Wallet.findOne({ userId: receiverUser._id }).session(session);
+      // Get wallets
+      const senderWallet = await tx.wallet.findUnique({
+        where: { userId: sender.id }
+      });
 
-    if (!senderWallet || !receiverWallet) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: "Wallet not found" });
-    }
+      const receiverWallet = await tx.wallet.findUnique({
+        where: { userId: receiver.id }
+      });
 
-    if (senderWallet.balance < amount) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: "Insufficient balance" });
-    }
+      if (!senderWallet || !receiverWallet) {
+        throw new Error(senderWallet ? "Receiver wallet not found" : "Sender wallet not found");
+      }
 
-    senderWallet.balance -= amount;
-    receiverWallet.balance += amount;
+      if (senderWallet.balance < amount) {
+        throw new Error("Insufficient balance");
+      }
 
-    await senderWallet.save({ session });
-    await receiverWallet.save({ session });
+      // Update balances
+      await tx.wallet.update({
+        where: { userId: sender.id },
+        data: { balance: { decrement: amount } }
+      });
 
-    // Record transactions for both parties
-    await recordTransaction({
-      userId: fromUserId,
-      type: 'transfer_out',
-      amount: amount,
-      status: 'success'
+      await tx.wallet.update({
+        where: { userId: receiver.id },
+        data: { balance: { increment: amount } }
+      });
+
+      // Record transactions
+      await tx.transaction.createMany({
+        data: [
+          {
+            userId: sender.id,
+            amount,
+            type: 'transfer_out',
+            status: 'success',
+            reference: `transfer-out-${Date.now()}`
+          },
+          {
+            userId: receiver.id,
+            amount,
+            type: 'transfer_in',
+            status: 'success',
+            reference: `transfer-in-${Date.now()}`
+          }
+        ]
+      });
+
+      return { senderId: sender.id, receiverId: receiver.id };
     });
+
+    res.status(200).json({
+      message: "Transfer successful",
+      transferId: `${result.senderId}-to-${result.receiverId}`
+    });
+
+  } catch (error) {
+    console.error("Transfer error:", error);
+    const status = error.message.includes("not found") 
+      ? 404 
+      : error.message === "Insufficient balance" 
+      ? 400 
+      : 500;
     
-    await recordTransaction({
-      userId: receiverUser._id,
-      type: 'transfer_in',
-      amount: amount,
-      status: 'success'
+    res.status(status).json({ 
+      message: error.message || "Transfer failed" 
     });
-
-    await session.commitTransaction();
-    res.status(200).json({ message: "Transfer successful" });
-
-  } catch (err) {
-    await session.abortTransaction();
-    console.error("Transfer error:", err);
-    res.status(500).json({ message: "Transfer failed", error: err.message });
-  } finally {
-    session.endSession();
   }
 };
 
-module.exports = { getWallet, createWallet, fundWallet, withdrawFunds, transferFunds };
+module.exports = {
+  getWallet,
+  createWallet,
+  fundWallet,
+  withdrawFunds,
+  transferFunds
+};

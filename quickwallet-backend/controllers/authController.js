@@ -1,5 +1,4 @@
-const User = require('../models/User');
-const Wallet = require("../models/Wallet"); 
+const prisma = require('../prismaClient')
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const generateToken = require("../utils/generateToken");
@@ -13,23 +12,35 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
-    const userExists = await User.findOne({ email });
+    const userExists = await prisma.user.findOne({ email });
     if (userExists) {
       return res.status(400).json({ message: "Email already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newUser = await User.create({ fullName, email, password: hashedPassword });
+    
+    const newUser = await prisma.$transaction(async (prisma) => {
+      const user = await prisma.user.create({
+        data: {
+          fullName,
+          email,
+          password: hashedPassword
+        }
+      });
 
     // Create wallet for new user
-    const wallet = new Wallet({
-      user: newUser._id,
+    await prisma.wallet.create({
+      date:{ser: newUser._id,
       email: email,
       balance: 0,
-      currency: "NGN",
+      currency: "NGN"
+    }
+  });
+return user;
     });
-    await wallet.save();
-    console.log("💼 Wallet created for user:", newUser._id);
+
+    console.log("Wallet Created for user:", newUser.id)
+    
 
     res.status(201).json({ 
       message: 'User registered successfully', 
@@ -56,7 +67,10 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email });
+    const user = await prisma.user.findUnique({ 
+    where: { email}
+    });
+    
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const match = await bcrypt.compare(password, user.password);
