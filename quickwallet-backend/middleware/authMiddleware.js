@@ -26,7 +26,7 @@ const authMiddleware = async (req, res, next) => {
     });
 
     if (!user) {
-      return res.status(401).json({ message: "User belonging to this token no longer exists" });
+      return res.status(401).json({ message: "User doesn't exists" });
     }
   
 

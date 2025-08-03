@@ -90,7 +90,7 @@ const fundWallet = async (req, res) => {
     }
 
     if (amount <= 0) {
-      return res.status(400).json({ message: "Amount must be greater than zero" });
+      return res.status(400).json({ message: "Invalid Amount" });
     }
 
     const result = await prisma.$transaction(async (tx) => {
