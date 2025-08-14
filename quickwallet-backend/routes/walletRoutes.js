@@ -1,6 +1,6 @@
 const express = require("express");
 //const { getWallet, createWallet, fundWallet, withdrawFunds, transferFunds } = require("../controllers/walletController");
-const walletController = require('../controllers/walletController');
+const walletController = require('../controllers/wallet');
 const authMiddleware = require("../middleware/authMiddleware");
 const router = express.Router();
 

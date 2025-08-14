@@ -11,7 +11,6 @@
   "license": "ISC",
   "description": "- Set up the backend for user authentication (register/login).\r - Implement JWT-based authentication and MongoDB integration.",
   "dependencies": {
-    "@prisma/client": "^6.13.0",
     "axios": "^1.9.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -20,12 +19,12 @@
     "express-validator": "^7.2.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.0",
+    "morgan": "^1.10.1",
     "pg": "^8.16.3",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",
-    "prisma": "^6.13.0",
     "ts-node": "^10.9.2"
   },
   "directories": {
